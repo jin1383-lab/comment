@@ -18,7 +18,6 @@ def get_youtube_comments(video_id, api_key, max_comments):
         comments_data = []
         
         # YouTube API는 한 번 요청할 때 최대 100개씩 가져올 수 있습니다.
-        # 사용자가 요청한 총 개수가 100개보다 적으면 그만큼만 요청합니다.
         fetch_limit = min(100, max_comments)
         
         request = youtube.commentThreads().list(
@@ -35,7 +34,6 @@ def get_youtube_comments(video_id, api_key, max_comments):
             response = request.execute()
             
             for item in response['items']:
-                # 사용자가 지정한 개수에 도달하면 루프 종료
                 if len(comments_data) >= max_comments:
                     break
                     
@@ -50,13 +48,12 @@ def get_youtube_comments(video_id, api_key, max_comments):
             # 현재까지 수집된 개수를 화면에 실시간 표시
             progress_text.text(f"⏳ 현재 {len(comments_data)}개 수집 완료...")
             
-            # 다음 페이지가 있고, 아직 목표 개수를 채우지 못했다면 계속 진행
             if len(comments_data) < max_comments:
                 request = youtube.commentThreads().list_next(request, response)
             else:
                 break
                 
-        progress_text.empty() # 상태 표시 텍스트 지우기
+        progress_text.empty() 
         return pd.DataFrame(comments_data)
         
     except Exception as e:
@@ -79,12 +76,11 @@ else:
 # URL 입력창
 video_url = st.text_input("유튜브 동영상 URL을 입력하세요:", placeholder="https://www.youtube.com/watch?v=...")
 
-# --- [추가된 기능] 댓글 개수 선택 슬라이더 ---
-# 최소 50개부터 최대 5000개까지, 50개 단위로 선택 가능 (기본값 500개)
+# --- 댓글 개수 선택 슬라이더 (최대 1000개 제한) ---
 max_comments_input = st.slider(
     "수집할 최대 댓글 개수를 선택하세요:", 
     min_value=50, 
-    max_value=5000, 
+    max_value=1000, 
     value=500, 
     step=50
 )
@@ -104,8 +100,6 @@ if st.button("댓글 수집 시작"):
                 
                 if df is not None and not df.empty:
                     st.success(f"성공! 총 {len(df)}개의 댓글을 수집했습니다.")
-                    
-                    # 수집된 데이터 미리보기
                     st.dataframe(df.head())
                     
                     # CSV 다운로드 버튼
