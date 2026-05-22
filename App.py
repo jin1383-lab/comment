@@ -13,11 +13,12 @@ def extract_video_id(url):
     return None
 
 # 2. 유튜브 댓글 수집 및 번역 함수
-def get_youtube_comments(video_id, api_key, max_comments, translate_to_ko=False):
+def get_youtube_comments(video_id, api_key, max_comments, translate_to_ko=True):
     try:
         youtube = build('youtube', 'v3', developerKey=api_key)
         comments_data = []
         
+        # YouTube API는 한 번 요청할 때 최대 100개씩 가져올 수 있습니다.
         fetch_limit = min(100, max_comments)
         
         request = youtube.commentThreads().list(
@@ -27,8 +28,10 @@ def get_youtube_comments(video_id, api_key, max_comments, translate_to_ko=False)
             textFormat='plainText'
         )
         
+        # 실시간 진행 상황을 표시할 텍스트 영역
         progress_text = st.empty()
         
+        # 댓글 수집 루프
         while request and len(comments_data) < max_comments:
             response = request.execute()
             
@@ -51,6 +54,7 @@ def get_youtube_comments(video_id, api_key, max_comments, translate_to_ko=False)
             
             progress_text.text(f"⏳ 현재 {len(comments_data)}개 수집 완료...")
             
+            # 다음 페이지가 있고, 아직 목표 개수를 채우지 못했다면 계속 진행
             if len(comments_data) < max_comments:
                 request = youtube.commentThreads().list_next(request, response)
             else:
@@ -60,7 +64,7 @@ def get_youtube_comments(video_id, api_key, max_comments, translate_to_ko=False)
         if translate_to_ko and comments_data:
             progress_text.text("🔤 수집된 댓글을 한글로 번역하는 중입니다...")
             
-            # 구글 번역기 설정 (자동 감지 -> 한국어)
+            # 구글 번역기 설정 (언어 자동 감지 -> 한국어 번역)
             translator = GoogleTranslator(source='auto', target='ko')
             
             # 하나씩 번역 적용
@@ -76,7 +80,7 @@ def get_youtube_comments(video_id, api_key, max_comments, translate_to_ko=False)
                     # 번역 실패 시 원문 그대로 유지
                     entry['한글 번역'] = entry['원문 댓글']
                     
-        progress_text.empty() 
+        progress_text.empty() # 작업 완료 후 진행 상태 메시지 지우기
         return pd.DataFrame(comments_data)
         
     except Exception as e:
@@ -89,14 +93,17 @@ st.set_page_config(page_title="유튜브 댓글 수집 & 번역기", layout="cen
 st.title("📊 유튜브 댓글 추출 & 번역 프로그램")
 st.write("유튜브 영상 링크와 원하는 옵션을 선택해 주세요.")
 
+# Streamlit의 Secrets 시스템에서 API Key 로드
 if "YOUTUBE_API_KEY" in st.secrets:
     API_KEY = st.secrets["YOUTUBE_API_KEY"]
 else:
     st.info("💡 배포 후 Streamlit Secrets에 'YOUTUBE_API_KEY'를 설정해주세요.")
     API_KEY = st.text_input("YouTube API Key를 입력하세요:", type="password")
 
+# URL 입력창
 video_url = st.text_input("유튜브 동영상 URL을 입력하세요:", placeholder="https://www.youtube.com/watch?v=...")
 
+# 댓글 개수 선택 슬라이더 (최소 50개, 최대 1000개, 기본값 500개)
 max_comments_input = st.slider(
     "수집할 최대 댓글 개수를 선택하세요:", 
     min_value=50, 
@@ -105,9 +112,10 @@ max_comments_input = st.slider(
     step=50
 )
 
-# --- [추가된 기능] 한글 번역 체크박스 ---
-translate_option = st.checkbox("🔄 외국어 댓글 한글로 자동 번역하기", value=False)
+# 한글 번역 체크박스 (기본 활성화 상태: value=True)
+translate_option = st.checkbox("🔄 외국어 댓글 한글로 자동 번역하기", value=True)
 
+# 실행 버튼
 if st.button("댓글 수집 시작"):
     if not API_KEY:
         st.warning("API Key가 필요합니다.")
@@ -124,13 +132,15 @@ if st.button("댓글 수집 시작"):
                 if df is not None and not df.empty:
                     st.success(f"성공! 총 {len(df)}개의 댓글을 처리했습니다.")
                     
-                    # 번역을 선택했다면 열 순서를 '작성자', '원문 댓글', '한글 번역' 순으로 보기 좋게 정렬
+                    # 번역을 선택했다면 열 순서를 보기 좋게 정렬
                     if translate_option and '한글 번역' in df.columns:
                         cols = ['작성자', '원문 댓글', '한글 번역', '좋아요수', '작성일']
                         df = df[cols]
                     
-                    st.dataframe(df.head())
+                    # .head()를 제거하여 수집된 데이터 전체를 테이블로 표시
+                    st.dataframe(df)
                     
+                    # CSV 다운로드 버튼 제공 (한글 깨짐 방지를 위해 utf-8-sig 인코딩 사용)
                     csv = df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
                     st.download_button(
                         label="엑셀(CSV) 파일로 다운로드",
